@@ -1,0 +1,308 @@
+🎯 KOMPLETNÍ ARCHITEKTURA PRO FLEURDIN AI
+
+  ---
+  📋 SHRNUTÍ POŽADAVKŮ:
+
+  MVP (Fáze 1):
+
+  - ✅ Chatbot pro esenciální oleje (20 free, 300 premium)
+  - ✅ Generování receptů s kapkami
+  - ✅ WIX plugin/widget
+  - ✅ Freemium model (free/paid subscription)
+  - ✅ Stovky uživatelů
+
+  Fáze 2:
+
+  - ✅ Rozšíření: Bylinky (partner)
+  - ✅ Rozšíření: Přírodní léky (lékařka)
+  - ✅ Multi-tenant (každý svůj web + plugin)
+  - ✅ Sdílená infrastruktura
+
+  ---
+  🏗️ DOPORUČENÁ ARCHITEKTURA:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                     FRONTEND                             │
+  ├─────────────────────────────────────────────────────────┤
+  │  WIX Plugin (Fleurdin)  │  WordPress (Bylinky)          │
+  │  Custom Web (Lékařka)   │  Embed Widget (Universal)     │
+  └──────────────────┬──────────────────────────────────────┘
+                     │ REST API / WebSocket
+                     ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │                   BACKEND API                            │
+  │  (FastAPI / Node.js + Express)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │  • Authentication (JWT)                                  │
+  │  • Subscription Management (Stripe/PayPal)              │
+  │  • Rate Limiting (free vs paid)                         │
+  │  • Multi-tenant Logic                                   │
+  │  • Chat History                                         │
+  └──────────────────┬──────────────────────────────────────┘
+                     │
+                     ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │                  AI INFERENCE                            │
+  │  (HuggingFace Inference / Modal / Replicate)            │
+  ├─────────────────────────────────────────────────────────┤
+  │  Model: Fine-tuned Gemma 2B nebo Llama 3.2 3B          │
+  │  • Esenciální oleje (300 olejů)                         │
+  │  • Bylinky (budoucí)                                    │
+  │  • Přírodní léky (budoucí)                              │
+  └──────────────────┬──────────────────────────────────────┘
+                     │
+                     ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │                   DATABASE                               │
+  │  PostgreSQL (Supabase / Railway)                        │
+  ├─────────────────────────────────────────────────────────┤
+  │  • Users & Subscriptions                                │
+  │  • Chat History                                         │
+  │  • Usage Analytics                                      │
+  │  • Recipe Cache                                         │
+  └─────────────────────────────────────────────────────────┘
+
+  ---
+  🤖 DOPORUČENÝ AI MODEL:
+
+  Pro MVP - google/gemma-2-2b-it ⭐⭐⭐⭐⭐
+
+  PROČ:
+  1. ✅ Rychlý - odpověď za 1-3 sekundy
+  2. ✅ Levný provoz - $0.10-0.20 za 1000 požadavků
+  3. ✅ Kvalitní čeština - Google má skvělou multilingvní podporu
+  4. ✅ Instruction-tuned - ideální pro tvůj use-case
+  5. ✅ Škálovatelný - zvládne stovky uživatelů
+
+  Pro Fázi 2 - meta-llama/Llama-3.2-3B-Instruct
+
+  Když rozšíříš na 3 domény (oleje + bylinky + léky), upgrade na větší model.
+
+  ---
+  ☁️ CLOUD INFRASTRUKTURA:
+
+  DOPORUČUJI: HuggingFace + Vercel + Supabase
+
+  1. AI Model Hosting:
+
+  HuggingFace Inference Endpoints 💪
+  - Cena: ~$0.60/hodina (pro Gemma 2B)
+  - Auto-scaling: Zapíná se jen když je traffic
+  - GPU: NVIDIA T4/A10
+  - Výhody:
+    - ✅ Automatické škálování
+    - ✅ Platíš jen za použití
+    - ✅ Jednoduchá integrace
+    - ✅ Monitoring zahrnutý
+
+  Alternativa: Modal.com nebo Replicate.com (ještě levnější)
+
+  ---
+  2. Backend API:
+
+  Vercel (nebo Railway.app) 🚀
+  - Cena: FREE až $20/měsíc (pro MVP)
+  - Framework: Next.js API routes nebo FastAPI
+  - Výhody:
+    - ✅ Serverless = automatické škálování
+    - ✅ Edge functions = rychlé
+    - ✅ Zero config deployment
+    - ✅ Built-in analytics
+
+  Alternativa: Railway.app, Render.com
+
+  ---
+  3. Database:
+
+  Supabase (PostgreSQL) 🗄️
+  - Cena: FREE až $25/měsíc (pro MVP)
+  - Výhody:
+    - ✅ Real-time subscriptions
+    - ✅ Built-in authentication
+    - ✅ Row-level security
+    - ✅ Auto backups
+
+  Alternativa: PlanetScale, Neon
+
+  ---
+  4. Payments:
+
+  Stripe 💳
+  - Cena: 1.5% + 4 Kč za transakci
+  - Subscription management: Built-in
+  - Výhody:
+    - ✅ Nejjednodušší integrace
+    - ✅ Česká podpora
+    - ✅ Webhooks pro automatizaci
+
+  ---
+  💰 ORIENTAČNÍ NÁKLADY:
+
+  MVP (První 3 měsíce):
+
+  AI Model (HuggingFace):    $50-100/měsíc (záleží na traffic)
+  Backend (Vercel):          FREE - $20/měsíc
+  Database (Supabase):       FREE - $25/měsíc
+  Domain + SSL:              $5/měsíc
+  Monitoring:                FREE (Vercel analytics)
+  ─────────────────────────────────────────
+  CELKEM:                    $55-150/měsíc
+
+  Po růstu (1000+ uživatelů):
+
+  AI Model:                  $200-500/měsíc
+  Backend:                   $50/měsíc
+  Database:                  $50/měsíc
+  ─────────────────────────────────────────
+  CELKEM:                    $300-600/měsíc
+
+  Monetizace:
+  - 100 platících uživatelů × $10/měsíc = $1000/měsíc příjem
+  - Zisk: $400-700/měsíc při 100 platících
+
+  ---
+  🔧 TECH STACK - MŮJ TIP:
+
+  Frontend (WIX Plugin):
+    • JavaScript/React widget
+    • Embeddable iframe
+
+  Backend API:
+    • Next.js 14 (App Router)
+    • TypeScript
+    • tRPC nebo REST API
+
+  AI Inference:
+    • HuggingFace Inference API
+    • Model: Gemma 2B (fine-tuned)
+
+  Database:
+    • Supabase (PostgreSQL)
+    • Prisma ORM
+
+  Authentication:
+    • Supabase Auth (email + social)
+
+  Payments:
+    • Stripe Checkout
+    • Stripe Subscriptions
+
+  Monitoring:
+    • Vercel Analytics
+    • Sentry (error tracking)
+
+  ---
+  📦 WIX PLUGIN/WIDGET:
+
+  Jak integrovat do WIXu:
+
+  Možnost 1 - Embed Widget (NEJJEDNODUŠŠÍ):
+  <!-- Vložit do WIX jako Custom Code -->
+  <div id="fleurdin-chat"></div>
+  <script src="https://tvuj-api.vercel.app/widget.js"></script>
+  <script>
+    FleurdinChat.init({
+      apiKey: 'tvuj_api_key',
+      position: 'bottom-right'
+    });
+  </script>
+
+  Možnost 2 - WIX Velo (pokročilé):
+  - Custom databinding
+  - Nativní vzhled
+
+  ---
+  🚀 MVP ROADMAP (6-8 týdnů):
+
+  Týden 1-2: Fine-tuning & Backend
+
+  - ✅ Fine-tune Gemma 2B na 300 olejích
+  - ✅ Deploy model na HuggingFace
+  - ✅ Vytvořit Backend API (Next.js)
+  - ✅ Setup Supabase database
+
+  Týden 3-4: Frontend & Widget
+
+  - ✅ Vytvořit chat widget
+  - ✅ Integrace se Stripe
+  - ✅ Freemium logika (20 vs 300 olejů)
+
+  Týden 5-6: Testing & WIX integrace
+
+  - ✅ Beta testing
+  - ✅ WIX plugin instalace
+  - ✅ UX optimalizace
+
+  Týden 7-8: Launch
+
+  - ✅ Produkční deployment
+  - ✅ Marketing
+  - ✅ Monitoring & analytics
+
+  ---
+  🎯 MONETIZAČNÍ STRATEGIE:
+
+  Free Tier:
+
+  - 20 esenciálních olejů
+  - 10 dotazů/měsíc
+  - Základní recepty
+
+  Premium ($10-15/měsíc):
+
+  - 300 esenciálních olejů
+  - Neomezené dotazy
+  - Detailní recepty s kapkami
+  - Personalizované doporučení
+  - Chat historie
+
+  Partner Tier (Fáze 2):
+
+  - Vše z Premium
+    - Bylinky (partnerská databáze)
+    - Přírodní léky (lékařka)
+  - White-label možnost
+
+  ---
+  🔐 BEZPEČNOST & COMPLIANCE:
+
+  ⚠️ DŮLEŽITÉ pro zdravotnické rady:
+  1. Disclaimer: "Nenahrazuje lékařskou péči"
+  2. GDPR compliance: Osobní data, cookies
+  3. Certifikace: Partner lékař musí garantovat
+  4. Terms of Service: Jasné podmínky
+
+  ---
+  📊 METRIKY PRO SLEDOVÁNÍ:
+
+  • Conversion rate (free → paid)
+  • Churn rate (odhlášení)
+  • Average questions per user
+  • Response time (AI latence)
+  • User satisfaction (thumbs up/down)
+  • Revenue per user
+
+  ---
+  ✨ DALŠÍ FEATURES (Post-MVP):
+
+  - 📱 Mobilní app (React Native)
+  - 🗣️ Voice chat (Speech-to-Text)
+  - 🌍 Multilingual (EN, DE, SK)
+  - 📧 Email recipes (export receptu)
+  - 🛒 E-shop integrace (přímý nákup)
+  - 📈 Health tracking (sledování progresu)
+
+  ---
+
+● ---
+  🎊 ZÁVĚR:
+
+  ✅ DOPORUČENÍ:
+
+  1. Model: google/gemma-2-2b-it (fine-tuned)
+  2. Hosting: HuggingFace Inference Endpoints
+  3. Backend: Vercel + Next.js
+  4. Database: Supabase
+  5. Payments: Stripe
+  6. Náklady: $55-150/měsíc (start)
+  7. Timeline: 6-8 týdnů do MVP

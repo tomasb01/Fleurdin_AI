@@ -1,0 +1,9 @@
+[project]
+name = "eo-dataset-upload"
+version = "0.1.0"
+description = "Upload EO dataset to HuggingFace"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=3.2.0",
+    "huggingface-hub>=0.26.5",
+]

@@ -1,0 +1,28 @@
+# FLEURDIN FINE-TUNING DEPENDENCIES
+# ===================================
+# Pro fine-tuning Gemma 2-2B-it modelu
+
+# Core ML libraries
+torch>=2.1.0
+transformers>=4.36.0
+datasets>=2.16.0
+accelerate>=0.25.0
+
+# PEFT (Parameter-Efficient Fine-Tuning) - pro LoRA
+peft>=0.7.0
+
+# Quantization (QLoRA - 4-bit training)
+bitsandbytes>=0.41.0
+
+# HuggingFace Hub (pro upload/download modelů)
+huggingface-hub>=0.20.0
+
+# Optimalizace
+sentencepiece>=0.1.99  # Pro Gemma tokenizer
+protobuf>=3.20.0
+
+# Optional: Weights & Biases (pro tracking)
+# wandb>=0.16.0
+
+# Optional: TensorBoard (pro visualizaci)
+# tensorboard>=2.15.0

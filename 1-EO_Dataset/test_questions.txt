@@ -1,0 +1,25 @@
+TESTOVACÍ OTÁZKY PRO POROVNÁNÍ MODELŮ
+=======================================
+
+1. Jaké jsou účinky oregana na tělo?
+
+2. Jaké oleje bys doporučil na psychickou únavu a stres?
+
+3. Které esenciální oleje pomáhají při zažívacích obtížích?
+
+4. Pomůže levandule při nespavosti?
+
+5. Na co se používá máta peprná?
+
+6. K čemu je u oleje uvedená jeho frekvence?
+
+7. Jaké esenciální oleje bys doporučil na bolesti kloubů a svalů?
+
+8. Který olej je dobrý na trávení?
+ 
+9. Jak bys vytvořil směs olejů na podporu spánku?
+ 
+---
+POZNÁMKY:
+- Test PŘED fine-tuningem: [datum]
+- Test PO fine-tuningu: [datum]
