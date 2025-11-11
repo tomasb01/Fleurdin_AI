@@ -15,10 +15,9 @@
 5. [Tier systém (Free vs Premium)](#tier-systém)
 6. [Postupné přidávání olejů](#postupné-přidávání-olejů)
 7. [Implementační stack](#implementační-stack)
-8. [Security & Cost Protection](#security--cost-protection) ⭐ NOVÉ
-9. [Náklady a revenue](#náklady-a-revenue)
-10. [Fáze vývoje](#fáze-vývoje)
-11. [Next steps](#next-steps)
+8. [Náklady a revenue](#náklady-a-revenue)
+9. [Fáze vývoje](#fáze-vývoje)
+10. [Next steps](#next-steps)
 
 ---
 
@@ -505,137 +504,6 @@ $$;
 
 ---
 
-## 🔒 SECURITY & COST PROTECTION
-
-### **Proč je to kritické?**
-
-**Reálné riziko:** Bot attack může zvýšit náklady z $80 → $500+/měsíc během jednoho dne.
-
-**📖 Kompletní dokumentace:** [SECURITY.md](./SECURITY.md)
-
----
-
-### **MVP SECURITY (MUST-HAVE)**
-
-#### **1. Rate Limiting** ⭐ PRIORITA #1
-
-**Konfigurace:**
-- **Free tier:** 10 zpráv/min, 50/den
-- **Premium tier:** 50 zpráv/min, 500/den
-
-**Tech:** Upstash Redis + @upstash/ratelimit
-
-**Náklady:** $0-5/měsíc
-
----
-
-#### **2. Input Validation** ⭐ PRIORITA #2
-
-**Ochrana před:**
-- XSS (Cross-Site Scripting)
-- Spam
-- Dlouhé inputy (vysoké náklady)
-
-**Limity:**
-- Max 500 znaků per zpráva
-- Pouze povolené znaky (CS + common symbols)
-- Blocked patterns (URLs, scripts)
-
-**Náklady:** $0 (jen kód)
-
----
-
-#### **3. HuggingFace Auto-Pause** ⭐ PRIORITA #3
-
-**Konfigurace:**
-```json
-{
-  "scaling": {
-    "minReplicas": 0,        // Může jít na 0 (žádné náklady)
-    "maxReplicas": 2         // Cost cap (max 2 instance)
-  },
-  "auto_pause": {
-    "enabled": true,
-    "idle_timeout": 300      // 5 minut bez requestů → pause
-  }
-}
-```
-
-**Savings:** $432/měsíc → $50-80/měsíc (83% úspora!)
-
----
-
-#### **4. Cost Tracking** ⭐ PRIORITA #4
-
-**Database:**
-```sql
-CREATE TABLE usage_tracking (
-  id UUID PRIMARY KEY,
-  user_id UUID,
-  session_id TEXT,
-  timestamp TIMESTAMP,
-  tokens_used INTEGER,
-  cost_estimate DECIMAL(10, 6)
-);
-```
-
-**Dashboard:** Real-time monitoring denních/měsíčních nákladů
-
-**Náklady:** $0 (included in Supabase)
-
----
-
-### **LAUNCH SECURITY (SHOULD-HAVE)**
-
-#### **5. CAPTCHA (Pro Free Tier)**
-
-**Kdy:** Před prvním použitím + po 10 zprávách (anonymous users)
-
-**Tech:** Google reCAPTCHA v3 (invisible)
-
-**Náklady:** $0 (1M assessments/měsíc zdarma)
-
----
-
-#### **6. IP Blacklisting**
-
-**Auto-ban:** Po 5 rate limit violations → ban na 24h
-
-**Tech:** Upstash Redis
-
-**Náklady:** $0 (included)
-
----
-
-#### **7. Email Alerts**
-
-**Thresholds:**
-- Warning: $10/den (email alert)
-- Critical: $50/den (auto-shutdown API + email)
-
-**Tech:** Resend + Vercel Cron
-
-**Náklady:** $0 (100 emails/měsíc free)
-
----
-
-### **Security Cost Summary:**
-
-| Feature | Cost/měsíc | Priority |
-|---|---|---|
-| Rate Limiting | $0-5 | ⭐⭐⭐ |
-| Input Validation | $0 | ⭐⭐⭐ |
-| Auto-pause | $0 (savings) | ⭐⭐⭐ |
-| Cost Tracking | $0 | ⭐⭐⭐ |
-| CAPTCHA | $0 | ⭐⭐ |
-| IP Blacklisting | $0 | ⭐⭐ |
-| Email Alerts | $0 | ⭐⭐ |
-| **TOTAL** | **$0-5/měsíc** | |
-
-**ROI:** Saves $300-500/měsíc při attack
-
----
-
 ## 💰 NÁKLADY A REVENUE
 
 ### **Měsíční náklady (Infrastructure):**
@@ -645,10 +513,9 @@ CREATE TABLE usage_tracking (
 | **HuggingFace Inference** | $50-80 | Auto-scale (T4 GPU) |
 | **Supabase** | $25 | Pro tier (pgvector + auth) |
 | **Vercel** | $20 | Pro tier (serverless) |
-| **Security** | $0-5 | Upstash Redis (rate limiting) |
 | **Stripe** | 1.4% + 6 Kč | Per transakce |
 | **Domain + SSL** | $2 | Cloudflare |
-| **TOTAL** | **$97-132/měsíc** | (~2,300-3,100 Kč) |
+| **TOTAL** | **$97-127/měsíc** | (~2,300-3,000 Kč) |
 
 ### **Náklady při škálování:**
 

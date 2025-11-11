@@ -1,0 +1,18 @@
+# FLEURDIN RAG BACKEND - DEPENDENCIES
+
+# Supabase client
+supabase>=2.0.0
+
+# Embeddings
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
+# Data processing
+pandas>=2.0.0
+datasets>=2.16.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# HuggingFace (optional, for testing)
+huggingface-hub>=0.20.0

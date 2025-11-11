@@ -77,3 +77,4 @@ models/*.bin
 models/*.safetensors
 *.safetensors
 *.bin
+*.mp4

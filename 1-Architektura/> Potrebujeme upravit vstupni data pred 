@@ -1,0 +1,6 @@
+> Potrebujeme upravit vstupni data pred tim, nez je nahrajeme na supabase a pouzijeme pro RAG. Chtel bych proto
+ udelat toto: 1. nahraju zdrojove soubory do jedne slozky. 2. vytvorime stringy do databaze, 3. Vytvorime 
+chunky, 4. Udelame vektorizaci a embeddings. Chtel bych takovou architekturu, aby pri otazce uzivatele sel 
+nejdrive dotaz do RAGU, to vygenererovalo nejpravdepodobnejsi odpoved a poslalo ji do LLM spolu s otazkou 
+uzivatele. LLM (model dame asi gpt4-mini nebo nano) k tomu vygeneruje odpoved a posle ji zpet uzivateli, co se 
+pta 
