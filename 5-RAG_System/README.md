@@ -184,7 +184,7 @@ Tento projekt je vytvořen pro vzdělávací účely.
 
 ## 👤 Autor
 
-Tomáš Bednář
+Tomáš Böhm
 - GitHub: [@tomasb01](https://github.com/tomasb01)
 - Email: kontakt přes GitHub
 
