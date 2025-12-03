@@ -43,6 +43,7 @@ Použití: Přidej do difuzéru 30 minut před spaním."
 | Recepty (kapky, použití) | ❌ | ✅ |
 | Cena | Zdarma | XXX Kč/měsíc |
 
+ **Users database:** Supabase tabulka s tier (free/premium) a Stripe subscription info
 ---
 
 ## 🏗️ TECHNICKÁ ARCHITEKTURA
