@@ -1,0 +1,25 @@
+> Potrebujeme upravit vstupni data pred tim, nez je nahrajeme na supabase (prozatim ponechame) a pouzijeme pro RAG. Chtel bych proto
+ udelat toto: 1. Priprava zdrojovych dokumentu do jedne slozky (hotovo). 2. vytvorime stringy do databaze, 3. Vytvorime 
+chunky, 4. Udelame vektorizaci a embeddings. Chtel bych takovou architekturu, aby pri otazce uzivatele sel 
+nejdrive dotaz do RAGU, to vygenererovalo nejpravdepodobnejsi odpoved a poslalo ji do LLM spolu s otazkou 
+uzivatele. LLM (model dame asi gpt4-mini nebo nano) k tomu vygeneruje odpoved a posle ji zpet uzivateli, co se 
+pta.
+
+
+-----
+Zdroje dokumentu pro RAG:
+1. Esencialni oleje - 
+    1a. Prehled oleju: aktualne je Excel soubor s 30 oleji, celkem jich bude cca 300. Pro pridavani dalsich oleju muzeme vkladat naprimo do databaze (napr. pgvector do Supabase nefungoval ani pres intenzivni bugfixing). Alternativne navrhni jine zpusoby, aby se s tim pracovalo jednoduse a hlavne data v databazi byly presne. 
+    Zdroj s 30 oleji je zde: /Users/atlas/Projects/Fleurdin_AI/2-Dataset/2-1-Raw_data/Fleurdin/EO_prehled oleju_30oils_updated.csv.xlsx
+    1b. Obecne instrukce: textove soubory, prevedene z hlasovych nahravek. V obecnych instrukci budou navody, jak se esencialni oleje pouzivaji pro uzivatele a instrukce pro LLM, jak ma vytvaret smesi esencialnich oleju na miru. Tyto data jeste nyni nemam, dodam postupne.
+
+2. Bylinky - 
+    2a. Dve knihy o bylinkach - jiz pripravene. Zdroje:
+    2aa. Kniha 1 "bez nazvu" - /Users/atlas/Projects/Fleurdin_AI/2-Dataset/2-1-Raw_data/Bylinky_DivokaStrava/Data/kniha2_hlavny text_rkp_NP_uprava 22-1-25.docx 
+    2ab. Kniha 2 "Lieciva sila divokych byliniek" - /Users/atlas/Projects/Fleurdin_AI/2-Dataset/2-1-Raw_data/Bylinky_DivokaStrava/Data/Liečivá sila divokých byliniek_po RU_1.2.2023.docx-
+
+    2b. Prepis hlasovych nahravek. Aktualni jeden vzorek, bude jich vice, predpokladam az 100. Aktualni zdroj:
+     /Users/atlas/Projects/Fleurdin_AI/2-Dataset/2-1-Raw_data/Bylinky_DivokaStrava/Data/DRIENKY.docx
+
+Prosim projdi aktualni chunking strategii zdroj zde (/Users/atlas/Projects/Fleurdin_AI/4-RAG_Pipeline/CHUNKING_STRATEGY_ANALYSIS.md), zreviduj pokud je potreba v ni neco zmenit. Pokud neco chybi, napis. Pokud ne, zacneme s chunking strategii krok za krokem.
+

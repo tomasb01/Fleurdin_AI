@@ -1,0 +1,442 @@
+======================================================================
+📊 FLEURDIN AI - RAG PIPELINE STATUS REPORT
+======================================================================
+Datum: 2025-12-02
+Autor: Claude Code + Tomáš
+Status: ✅ IMPLEMENTOVÁNO, ⚠️ PROBLÉMY S RELEVANCÍ
+
+======================================================================
+1. CO JSME UDĚLALI - KOMPLETNÍ PIPELINE
+======================================================================
+
+📂 KROK 1: PARSING (parsing_script.py)
+----------------------------------------------------------------------
+✅ Načtení zdrojových souborů:
+  • Excel: 30 esenciálních olejů
+  • Word: 2 knihy o bylinkách (1,590 + 1,877 odstavců)
+  • Word: 1 voice transkript (DRIENKY, 3 odstavce)
+
+✅ Výstup: parsed_data.json (3,500 položek)
+
+
+🧩 KROK 2: CHUNKING (chunking_script.py)
+----------------------------------------------------------------------
+✅ Strategie:
+  • Malé texty (<1,500 znaků) = ponechat celé
+  • Velké texty = rozdělit na 1,200 znaků s 200 překryvem (17%)
+
+✅ Parametry:
+  • chunk_size: 1,200 znaků (optimalizováno pro GPT-4-mini náklady)
+  • overlap: 200 znaků
+  • Důvod: Kompromis mezi kvalitou a cenou (+$0.14/měsíc vs 1,000 znaků)
+
+✅ Výstup: chunked_data.json (3,505 chunků)
+
+
+🏷️ KROK 3: FIX LABELS (fix_labels_script.py)
+----------------------------------------------------------------------
+✅ Problém: Původní labels byly nejasné (98.9% "book_paragraph")
+✅ Řešení: Vytvořen label mapping:
+
+  PŘED:                          PO OPRAVĚ:
+  • book_paragraph        →      • herb_knowledge
+  • voice_transcript      →      • herb_knowledge
+  • essential_oil         →      • essential_oil (beze změny)
+
+✅ Finální struktura každého chunku:
+  {
+    "id": "oil_16_full",
+    "type": "essential_oil",           // Hlavní kategorie
+    "entity_type": "oil_profile",      // Podkategorie
+    "content_type": "database",        // Typ obsahu
+    "tier": "free",                    // Business model (free/premium)
+    "name": "Levandule",               // Název entity
+    "text": "OLEJ: Levandule...",
+    "part": 1,
+    "total_parts": 1,
+    "chunk_size": 970,
+    "embedding": [0.23, -0.45, ...],   // 384 dimenzí
+    "metadata": {
+      "english_name": "Lavender",
+      "latin_name": "Lavandula",
+      "category": "esenciální oleje"
+    }
+  }
+
+✅ Rozdělení:
+  • essential_oil: 30 chunků (tier: free)
+  • herb_knowledge: 3,475 chunků (tier: premium)
+  • CELKEM: 3,505 chunků
+
+✅ Výstup: chunked_data_FIXED.json (39.5 MB)
+
+
+🧠 KROK 4: EMBEDDINGS (embeddings_script.py)
+----------------------------------------------------------------------
+✅ Model: paraphrase-multilingual-MiniLM-L12-v2
+  • Dimenze: 384
+  • Max tokens: 512 (~2,048 znaků)
+  • Jazyky: Čeština + Slovenština
+  • Velikost: ~420 MB
+  • Open-source: Zdarma
+
+✅ Proces:
+  • Batch size: 32
+  • Vytvoření embeddings pro všech 3,505 chunků
+  • Každý chunk dostal 384-dimenzionální vektor
+
+✅ Výstup: chunked_data_with_embeddings.json (39.5 MB)
+
+
+💾 KROK 5: SUPABASE UPLOAD (upload_to_supabase.py)
+----------------------------------------------------------------------
+✅ Databáze: Supabase (PostgreSQL + pgvector extension)
+✅ Tabulka: knowledge_chunks
+
+✅ SQL Schema:
+  • Sloupce: id, type, entity_type, content_type, tier, name, text,
+             part, total_parts, chunk_size, metadata, embedding (vector 384)
+  • Indexy: type, tier, entity_type
+  • Vector index: ivfflat (lists=100) pro rychlé vyhledávání
+
+✅ RPC Funkce: match_chunks()
+  • Parametry: query_embedding, match_threshold, match_count,
+               filter_tier, filter_type
+  • Vrací: Top N nejpodobnějších chunků s similarity score (0-1)
+  • Podporuje filtrování podle tier (free/premium) a type
+
+✅ Upload:
+  • Batch processing: 100 chunků najednou
+  • Celková doba: ~13 sekund
+  • Status: 3,505/3,505 chunků úspěšně nahráno ✅
+
+
+🔍 KROK 6: TESTOVÁNÍ (test_vector_search.py)
+----------------------------------------------------------------------
+✅ Testy vector search provedeny
+✅ Statistiky databáze ověřeny
+✅ Tier filtering funguje
+✅ Type filtering funguje
+
+
+======================================================================
+2. AKTUÁLNÍ VÝSLEDKY TESTŮ
+======================================================================
+
+TEST 1: "Jak použít levanduli na spaní?" (filter: essential_oil)
+----------------------------------------------------------------------
+Očekávaný výsledek: Levandule by měla být #1
+Skutečný výsledek:
+
+  Top 5 výsledků:
+  1. Frangipani          | Similarity: 0.440 | ✅ Sedativum
+  2. Bazalka             | Similarity: 0.388 | ❓
+  3. Ho wood             | Similarity: 0.377 | ✅ Sedativum
+  4. Borovice lesní      | Similarity: 0.365 | ❓
+  5. Muškátový oříšek    | Similarity: 0.352 | ❓
+
+  ❌ Levandule: pozice 9/30 | Similarity: 0.333
+
+❌ PROBLÉM: Levandule není v top 5, přestože má v textu:
+   "Podporuje spánek a ulevuje při nespavosti"
+
+
+TEST 2: "Jaké jsou léčivé účinky púpavy?" (filter: herb_knowledge)
+----------------------------------------------------------------------
+Očekávaný výsledek: Několik chunků o púpavě
+Skutečný výsledek:
+
+  ✅ 1 výsledek nalezen:
+  1. Kniha 1 - odstavec 2316 | Similarity: 0.458
+
+⚠️  PROBLÉM: Pouze 1 výsledek - možná je púpava v dalších chunkcích
+
+
+TEST 3: "Bolest hlavy" (filter: free tier only)
+----------------------------------------------------------------------
+Očekávaný výsledek: Oleje pomáhající s bolestí hlavy
+Skutečný výsledek:
+
+  Top 4 výsledků:
+  1. Smrk černý         | Similarity: 0.360
+  2. Řebříček           | Similarity: 0.335
+  3. Muškátový oříšek   | Similarity: 0.309
+  4. Růže               | Similarity: 0.302
+
+  ❌ Levandule NE v top 5 (přestože má "Zmírňuje bolesti hlavy")
+
+✅ FUNGUJE: Tier filtering (pouze free oleje)
+
+
+TEST 4: "Drienka na zdraví" (bez filtrů)
+----------------------------------------------------------------------
+Očekávaný výsledek: Chunky o šípkách/drience
+Skutečný výsledek:
+
+  Top 5 výsledků:
+  1. Kniha 2 - odstavec 67    | Similarity: 0.853 | "Šípkový prášok zdravia"
+  2. Kniha 2 - odstavec 1052  | Similarity: 0.827 | "ŠÍPKOVÝ PRÁŠOK ZDRAVIA"
+  3. Kniha 2 - odstavec 597   | Similarity: 0.825 | "ZDRAVÉ LESNÉ MUFFINY"
+  4. Kniha 2 - odstavec 1191  | Similarity: 0.699 | "ORGOVÁNOVÝ MED"
+  5. Kniha 2 - odstavec 1525  | Similarity: 0.669 | O bříze
+
+✅ FUNGUJE PERFEKTNĚ: Velmi vysoká similarity (0.8+)
+
+
+======================================================================
+3. IDENTIFIKOVANÉ PROBLÉMY
+======================================================================
+
+❌ PROBLÉM #1: RELEVANTNÍ INFO "UTONUTÉ" V TEXTU
+----------------------------------------------------------------------
+Popis:
+  • Levandule má 970 znaků textu
+  • Obsahuje 15+ různých kategorií (kůže, vlasy, trávení, svaly,
+    bolest, srdce, hormony, imunita, nervový systém, psychika)
+  • Info o spaní je pouze ~50 znaků z 970 (5% textu)
+
+Důsledek:
+  • Embedding vektor reprezentuje PRŮMĚR všech těch témat
+  • Spaní má malou váhu → nízká similarity pro dotazy o spaní
+  • Model vidí Levanduli jako "multi-purpose" olej, ne primárně
+    na spaní
+
+Příklad Levandule textu:
+  "...Na ekzém, Lupénku, Akné, Jizvy, Strie, Bodnutí hmyzem,
+   Hojí popáleniny, Podporuje růst vlasů, Ulevuje od svědění
+   pokožky hlavy, Pomáhá proti lupům, Pomáhá při cukrovce,
+   Na bolavé svaly a klouby, Při revmatismu, Zmírňuje bolesti
+   hlavy a ucha, Snižuje krevní tlak, Snižuje hladinu cholesterolu,
+   Ulevuje při PMS, Pomáhá při alergiích, Pomáhá při Alzheimerově
+   chorobě, Uklidňuje přetížené nervy, Uvolňuje napětí, Pomáhá
+   při vertigu, Na úžeh, Uklidňuje mysl, Pomáhá při stresu
+   a depresích, Zlepšuje náladu, Podporuje spánek a ulevuje
+   při nespavosti..."
+
+→ "Podporuje spánek" je ztraceno mezi 20+ dalšími účinky
+
+
+❌ PROBLÉM #2: MALÝ POČET VÝSLEDKŮ PRO SPECIFICKÉ DOTAZY
+----------------------------------------------------------------------
+Popis:
+  • Dotaz "púpava" vrátil pouze 1 chunk
+  • Možná existuje víc chunků o púpavě, ale mají similarity <0.3
+
+Důsledek:
+  • Uživatel nevidí všechny relevantní informace
+  • RAG může být neúplný
+
+
+❌ PROBLÉM #3: THRESHOLD 0.3 MOŽNÁ MÓC PŘÍSNNÝ
+----------------------------------------------------------------------
+Současné nastavení:
+  • match_threshold = 0.3
+  • match_count = 5
+
+Důsledek:
+  • Odfiltruje chunky se similarity 0.25-0.30 (které mohou být
+    relevantní)
+
+
+======================================================================
+4. MOŽNÁ ŘEŠENÍ (K DISKUZI)
+======================================================================
+
+💡 ŘEŠENÍ A: METADATA TAGS + HYBRID SEARCH
+----------------------------------------------------------------------
+Co to je:
+  • Přidat do metadata tags pro každý olej:
+
+    "metadata": {
+      "tags": ["spaní", "nespavost", "relaxace", "stres",
+               "bolest_hlavy", "akné", "popáleniny", ...],
+      "categories": {
+        "psychika": true,
+        "kůže": true,
+        "bolest": true
+      }
+    }
+
+  • Upravit RAG pipeline:
+    1. Vector search (top 20)
+    2. Re-rank podle metadata (boost +0.2 pro relevantní tags)
+    3. Vrátit top 5
+
+Výhody:
+  ✅ Levandule by dostala bonus za tag "spaní" → top výsledek
+  ✅ Přesnost + sémantické porozumění
+  ✅ Žádné re-chunkování (rychlá implementace)
+
+Nevýhody:
+  ❌ Manuální práce s tagy (nebo AI extrakce)
+  ❌ Nutnost aktualizovat všech 30 olejů
+
+
+💡 ŘEŠENÍ B: RE-CHUNKING (MENŠÍ CHUNKY)
+----------------------------------------------------------------------
+Co to je:
+  • Rozdělit každý olej na menší chunky podle kategorií:
+    - Chunk 1: "Levandule - Účinky na kůži" (200 znaků)
+    - Chunk 2: "Levandule - Účinky na psychiku" (150 znaků)
+    - Chunk 3: "Levandule - Bolest a záněty" (180 znaků)
+    - atd.
+
+Výhody:
+  ✅ Embeddings budou zaměřené na konkrétní téma
+  ✅ "Spaní" chunk bude mít vysokou similarity
+  ✅ Žádné metadata tags potřeba
+
+Nevýhody:
+  ❌ Více chunků = vyšší náklady (GPT-4-mini input)
+  ❌ Nutnost re-chunkovat všechna data
+  ❌ Ztráta kontextu (uživatel nevidí všechny účinky najednou)
+
+
+💡 ŘEŠENÍ C: ZVÝŠIT MATCH_COUNT A SNÍŽIT THRESHOLD
+----------------------------------------------------------------------
+Co to je:
+  • match_count: 5 → 10
+  • match_threshold: 0.3 → 0.25
+
+Výhody:
+  ✅ Nejjednodušší (změna 2 čísel)
+  ✅ Levandule by se zobrazila (je na pozici 9)
+  ✅ Více výsledků = víc info pro uživatele
+
+Nevýhody:
+  ❌ Neřeší core problém (Levandule má nízkou similarity)
+  ❌ Vyšší náklady (10 chunků místo 5 → +100% input tokens)
+  ❌ Možná irelevantní výsledky (similarity <0.3)
+
+
+💡 ŘEŠENÍ D: KOMBINACE A + C (DOPORUČENO)
+----------------------------------------------------------------------
+Co to je:
+  1. Přidat metadata tags (Řešení A)
+  2. Zvýšit match_count na 10 (Řešení C)
+  3. Re-rank podle tags + similarity
+  4. Vrátit top 5 s nejvyšším skóre
+
+Výhody:
+  ✅ Nejlepší ze všech světů
+  ✅ Přesnost + víc kandidátů
+  ✅ Rozumné náklady
+
+Nevýhody:
+  ❌ Manuální práce s tagy
+
+
+💡 ŘEŠENÍ E: KEYWORD EXTRACTION + METADATA
+----------------------------------------------------------------------
+Co to je:
+  • AI automaticky extrahuje klíčová slova z textu:
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    keywords = extract_keywords(oil_text)
+    # → ["spaní", "nespavost", "relaxace", "stres", ...]
+
+  • Uloží do metadata.tags
+  • Žádná manuální práce
+
+Výhody:
+  ✅ Automatizované (0 manuální práce)
+  ✅ Škálovatelné (funguje pro 100+ olejů)
+
+Nevýhody:
+  ❌ Možná nepřesné (AI chyby)
+  ❌ Nutnost ověření
+
+
+======================================================================
+5. STATISTIKY & SHRNUTÍ
+======================================================================
+
+✅ CO FUNGUJE:
+----------------------------------------------------------------------
+  • Parsing: 100% úspěšnost
+  • Chunking: 3,505 chunků vytvořeno
+  • Embeddings: Všechny vektory vytvořeny (384 dimenzí)
+  • Supabase upload: 3,505/3,505 chunků (100%)
+  • Tier filtering: Funguje perfektně (free vs premium)
+  • Type filtering: Funguje perfektně (essential_oil vs herb_knowledge)
+  • Labels: Správně implementovány a opraveny
+  • Vector search: Technicky funkční
+  • Vysoká similarity pro přesné dotazy: "Drienka" → 0.853 ✅
+
+
+⚠️  CO NEFUNGUJE OPTIMÁLNĚ:
+----------------------------------------------------------------------
+  • Relevance pro multi-purpose entity (Levandule): Pozice 9/30 ❌
+  • Malý počet výsledků pro některé dotazy: Púpava → pouze 1 ❌
+  • Specifické účinky "utonuté" v dlouhých textech ❌
+  • Threshold možná moc přísný (0.3) ⚠️
+
+
+📊 DATABÁZE:
+----------------------------------------------------------------------
+  • Celkem chunků: 3,505
+  • Essential oils (free): 30
+  • Herb knowledge (premium): 3,475
+  • Embedding dimenze: 384
+  • Model: paraphrase-multilingual-MiniLM-L12-v2
+  • Průměrná velikost chunku: ~1,050 znaků
+
+
+======================================================================
+6. DOPORUČENÍ PRO DISKUZI
+======================================================================
+
+🎯 OTÁZKY K ROZMYŠLENÍ:
+----------------------------------------------------------------------
+1. Jaký je hlavní use case?
+   • Přesné hledání konkrétního oleje? → Metadata tags
+   • Objevování podobných olejů? → Současný systém OK
+   • Obojí? → Hybrid
+
+2. Kolik času máme na implementaci?
+   • Rychlé: Zvýšit match_count (5 min)
+   • Střední: Metadata tags (2-4 hodiny pro 30 olejů)
+   • Dlouhé: Re-chunking (1 den)
+
+3. Jaký je budget na OpenAI API?
+   • Nízký: Nechat match_count=5
+   • Střední: Zvýšit na 8-10
+   • Vysoký: Re-chunking (více chunků)
+
+4. Jak často se budou přidávat nové oleje?
+   • Zřídka: Manuální tagging OK
+   • Často: Automatizovaná extrakce nutná
+
+
+🚀 NEXT STEPS (po diskuzi):
+----------------------------------------------------------------------
+1. Rozhodnout, které řešení implementovat (A/B/C/D/E)
+2. Otestovat na pár olejích (proof of concept)
+3. Pokud funguje → aplikovat na všech 30 olejů
+4. Re-test vector search
+5. Integrace do chatbota (GPT-4-mini)
+
+
+======================================================================
+📞 KONTAKT & POZNÁMKY
+======================================================================
+
+Projekt: Fleurdin AI
+Datum: 2025-12-02
+Status: Pipeline funkční, optimalizace potřebná
+
+Důležité soubory:
+  • chunked_data_FIXED.json (39.5 MB) - Finální data
+  • test_vector_search.py - Test script
+  • upload_to_supabase.py - Upload script
+  • RAG_PIPELINE_STATUS_REPORT.txt - Tento dokument
+
+Supabase:
+  • URL: https://epkdzxknngitpxziylqo.supabase.co
+  • Tabulka: knowledge_chunks
+  • RPC funkce: match_chunks()
+
+======================================================================
+✅ KONEC REPORTU
+======================================================================

@@ -182,9 +182,12 @@ Model **NETAHÁ znalosti z paměti**, ale **dostává relevantní data při kaž
 │  📊 300 olejů (postupně přidáváš)               │
 │  📊 Účinky na tělo, psychiku                    │
 │  📊 Recepty (kapky, použití)                    │
+│  📊 Voice transkripty (chunky z nahrávek)       │
+│  📊 Knihy o bylinkách (chunky)                  │
 │  📊 Vector embeddings pro search                │
 │                                                  │
 │  UPDATE: Kdykoliv přidáš nový olej (2 min)      │
+│  UPDATE: Kdykoliv přidáš novou nahrávku (5 min) │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -316,7 +319,7 @@ def format_response(result, user_tier):
 
 ### **KLÍČOVÁ VÝHODA RAG:**
 
-**Nemusíš re-trainovat model při každém novém oleji!**
+**Nemusíš re-trainovat model při každém novém oleji nebo nahrávce!**
 
 ### **Workflow: Přidání nového oleje**
 
@@ -368,6 +371,64 @@ print("✅ Ylang-Ylang přidán! Model ho hned vidí.")
 **💰 Cena:** $0
 **🔄 Re-training:** NEPOTŘEBA
 
+### **Workflow: Přidání nové voice nahrávky**
+
+```python
+# add_voice_transcript.py
+
+from sentence_transformers import SentenceTransformer
+from supabase import create_client
+import json
+
+# Setup
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+
+# 1. Načti transkript (JSON z voice-to-text)
+with open('drienka_transcript.json', 'r') as f:
+    transcript = json.load(f)
+
+# 2. Spojit věty do souvislého textu
+full_text = " ".join([s['text'] for s in transcript['sentences']])
+
+# 3. Chunking (fixed-size, 1000 znaků, 150 overlap)
+chunks = []
+chunk_size = 1000
+overlap = 150
+start = 0
+
+while start < len(full_text):
+    end = start + chunk_size
+    chunk_text = full_text[start:end]
+    chunks.append(chunk_text)
+    start += (chunk_size - overlap)
+
+# 4. Vygeneruj embeddings a ulož do databáze
+for i, chunk in enumerate(chunks):
+    embedding = embedder.encode(chunk).tolist()
+
+    supabase.table('knowledge_chunks').insert({
+        'entity_name': 'Drienka obyčajná',
+        'entity_type': 'herb',
+        'source_type': 'voice_transcript',
+        'chunk_text': chunk,
+        'part': i + 1,
+        'total_parts': len(chunks),
+        'tier': 'premium',  # nebo 'free'
+        'metadata': {
+            'duration_minutes': 7.5,
+            'speaker': 'A'
+        },
+        'embedding': embedding
+    }).execute()
+
+print(f"✅ Drienka přidána! {len(chunks)} chunků nahráno do databáze.")
+```
+
+**⏱️ Čas:** 5 minut
+**💰 Cena:** $0
+**🔄 Re-training:** NEPOTŘEBA
+
 ### **Časová osa (První rok):**
 
 ```
@@ -379,6 +440,8 @@ MĚSÍC 1 (MVP):
 MĚSÍC 2-6:
 ✅ Přidáváš 50 nových olejů (po 10/měsíc)
 ✅ Každý olej = 2 minuty (SQL insert)
+✅ Přidáváš 10-20 voice transkriptů (bylinky + oleje)
+✅ Každý transkript = 5 minut (chunking + embeddings)
 ❌ ŽÁDNÝ re-training
 
 MĚSÍC 7-12:
@@ -446,6 +509,21 @@ CREATE TABLE essential_oils (
   embedding VECTOR(384)
 );
 
+-- 1b. Knowledge Base Chunks (Knihy + Voice Transkripty)
+CREATE TABLE knowledge_chunks (
+  id BIGSERIAL PRIMARY KEY,
+  entity_name TEXT NOT NULL,        -- Název byliny/oleje
+  entity_type TEXT NOT NULL,        -- 'herb', 'essential_oil', 'general'
+  source_type TEXT NOT NULL,        -- 'book', 'voice_transcript'
+  chunk_text TEXT NOT NULL,         -- Samotný text chunku
+  part INTEGER,                     -- Číslo části (1, 2, 3...)
+  total_parts INTEGER,              -- Celkový počet částí
+  tier TEXT DEFAULT 'free',         -- 'free' nebo 'premium'
+  metadata JSONB,                   -- Další metadata (duration, speaker, ...)
+  embedding VECTOR(384),            -- Vector embedding pro search
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- 2. Recipes
 CREATE TABLE recipes (
   id BIGSERIAL PRIMARY KEY,
@@ -474,7 +552,7 @@ CREATE TABLE conversations (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 5. Vector Search Function
+-- 5. Vector Search Function (Essential Oils)
 CREATE OR REPLACE FUNCTION match_oils(
   query_embedding VECTOR(384),
   match_threshold FLOAT,
@@ -497,6 +575,38 @@ AS $$
   WHERE
     1 - (embedding <=> query_embedding) > match_threshold
     AND (tier = 'free' OR user_tier = 'premium')
+  ORDER BY similarity DESC
+  LIMIT match_count;
+$$;
+
+-- 6. Vector Search Function (Knowledge Chunks)
+CREATE OR REPLACE FUNCTION match_knowledge(
+  query_embedding VECTOR(384),
+  match_threshold FLOAT,
+  match_count INT,
+  user_tier TEXT DEFAULT 'free',
+  source_filter TEXT DEFAULT NULL  -- 'book', 'voice_transcript', nebo NULL (všechny)
+)
+RETURNS TABLE (
+  id BIGINT,
+  entity_name TEXT,
+  entity_type TEXT,
+  source_type TEXT,
+  chunk_text TEXT,
+  part INTEGER,
+  total_parts INTEGER,
+  similarity FLOAT
+)
+LANGUAGE SQL STABLE
+AS $$
+  SELECT
+    id, entity_name, entity_type, source_type, chunk_text, part, total_parts,
+    1 - (embedding <=> query_embedding) AS similarity
+  FROM knowledge_chunks
+  WHERE
+    1 - (embedding <=> query_embedding) > match_threshold
+    AND (tier = 'free' OR user_tier = 'premium')
+    AND (source_filter IS NULL OR source_type = source_filter)
   ORDER BY similarity DESC
   LIMIT match_count;
 $$;

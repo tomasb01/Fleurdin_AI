@@ -202,8 +202,8 @@ Pravidlo 3: Velké entity (>2,500 znaků)
 -----------------------------------------
 
 Rozdělit na fixed-size chunky:
-- Velikost: 1,000 znaků
-- Overlap: 150 znaků (15%)
+- Velikost: 1,200 znaků
+- Overlap: 200 znaků (~17%)
 - Metadata: entity_name, part_number
 
 Příklad JSON:
@@ -254,13 +254,13 @@ Chunking parametry:
 --------------------------------------------------------------------------------
 
 CHUNKING_CONFIG = {
-    # Entity-based thresholds
+    # Entity-based thresholds (optimalizováno pro GPT-4-mini)
     "small_entity_max": 1500,      # znaků - celá entita = 1 chunk
     "medium_entity_max": 2500,     # znaků - celá entita = 1 chunk (hranice)
 
     # Fixed-size parameters (pro velké entity)
-    "fixed_chunk_size": 1000,      # znaků
-    "fixed_chunk_overlap": 150,    # znaků (15%)
+    "fixed_chunk_size": 1200,      # znaků
+    "fixed_chunk_overlap": 200,    # znaků (~17%)
 
     # Heading detection
     "heading_max_length": 100,     # znaků - max délka nadpisu
@@ -288,11 +288,11 @@ Typ                   | Počet entit | Očekávané  | Průměrná
 ----------------------|-------------|------------|---------------
 Esenciální oleje      | 28          | 28         | ~1,155 znaků
 Kniha 1 - kapitoly    | 21          | 21         | ~300 znaků
-Kniha 1 - bylinky     | 16          | ~40-50     | ~1,000 znaků
+Kniha 1 - bylinky     | 16          | ~40-50     | ~1,000-1,200 znaků
 Kniha 2 - kapitoly    | ~10         | ~10        | ~500 znaků
-Kniha 2 - stromy      | 3+          | ~150-200   | ~1,000 znaků
-Transkript            | 58          | 58         | ~126 znaků
-CELKEM                | ~136        | ~300-370   | ~800-1,200 znaků
+Kniha 2 - stromy      | 3+          | ~150-200   | ~1,000-1,200 znaků
+Transkript            | 58          | ~5-7       | ~1,000-1,200 znaků
+CELKEM                | ~136        | ~280-350   | ~900-1,200 znaků
 
 REDUKCE: Z 2,878 raw odstavců → ~300-370 optimalizovaných chunků
 
@@ -318,7 +318,7 @@ REDUKCE: Z 2,878 raw odstavců → ~300-370 optimalizovaných chunků
    - Může poskládat kompletní odpověď z více chunků
 
 5. Overlap prevence ztráty:
-   - 150 znaků overlap = ~1-2 věty
+   - 200 znaků overlap (~17 %) = ~1-2 věty
    - Zajišťuje kontinuitu na hranicích
 
 
@@ -341,7 +341,7 @@ REDUKCE: Z 2,878 raw odstavců → ~300-370 optimalizovaných chunků
    - Uživatel může dostat neúplnou odpověď
 
 4. Overlap = duplicita:
-   - 150 znaků overlap = ~15% navíc dat
+   - 200 znaků overlap = ~17 % navíc dat
    - Větší databáze, pomalejší vyhledávání
 
 
@@ -351,7 +351,7 @@ REDUKCE: Z 2,878 raw odstavců → ~300-370 optimalizovaných chunků
 
 Alternativa 1: Pure Fixed-size
 --------------------------------------------------------------------------------
-Všechny chunky = 800 znaků, overlap 150 znaků
+Všechny chunky = 800 znaků, overlap 200 znaků
 
 Výhody:
 - Jednoduchá implementace
@@ -456,13 +456,13 @@ def fixed_size_chunking(text, entity_name):
 
 Otázky k diskuzi:
 
-1. Je 1,000 znaků optimální pro fixed-size chunky?
+1. Je 1,200 znaků optimální pro fixed-size chunky?
    - Alternativa: 800 znaků (menší, více chunků)
    - Alternativa: 1,500 znaků (větší, méně chunků)
 
-2. Je 150 znaků overlap dostatečný?
-   - Alternativa: 100 znaků (10% overlap)
-   - Alternativa: 200 znaků (20% overlap)
+2. Je 200 znaků overlap dostatečný?
+   - Alternativa: 100 znaků (menší overlap, méně dat navíc)
+   - Alternativa: 250 znaků (větší overlap, více kontextu)
 
 3. Měli bychom použít semantic chunking pro velké entity?
    - Např. LLM rozdělí "Hloh" na logické sekce (účinky, použití, recepty)
@@ -547,7 +547,7 @@ Projekt: Fleurdin AI
 GitHub: [doplnit]
 
 Feedback - Prosím o review:
-- Jsou parametry (1000/150) správné?
+- Jsou parametry (1200/200) správné?
 - Máte zkušenosti s multilingual embeddings?
 - Doporučujete jinou strategii?
 
