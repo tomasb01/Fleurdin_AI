@@ -347,6 +347,485 @@ CONFIG = {
 
 ---
 
+## 👤 AUTHENTICATION & USER MANAGEMENT
+
+### **Přehled systému:**
+
+Fleurdin AI používá **freemium model** založený na tier systému:
+- **Anonymous users** → free tier (omezený přístup)
+- **Registered users** → free tier (vylepšená UX)
+- **Premium subscribers** → premium tier (plný přístup)
+
+### **Supabase Schema (rozšířené):**
+
+```sql
+-- Users tabulka (rozšířená o subscription)
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email TEXT UNIQUE NOT NULL,
+  tier TEXT DEFAULT 'free',                    -- 'free', 'premium'
+
+  -- Stripe integrace
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  subscription_status TEXT,                    -- 'active', 'canceled', 'past_due', 'trialing'
+  subscription_started_at TIMESTAMP,
+  subscription_ends_at TIMESTAMP,
+
+  -- Metadata
+  created_at TIMESTAMP DEFAULT NOW(),
+  last_login_at TIMESTAMP,
+
+  -- Constraints
+  CHECK (tier IN ('free', 'premium')),
+  CHECK (subscription_status IN ('active', 'canceled', 'past_due', 'trialing', NULL))
+);
+
+-- Conversations (pro uložení historie)
+CREATE TABLE conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  session_id TEXT,                             -- Pro anonymous users
+  messages JSONB NOT NULL,                     -- Array konverzací
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Usage tracking (pro analytics)
+CREATE TABLE usage_tracking (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  session_id TEXT,
+
+  -- Request info
+  message_length INT,
+  tokens_used INT,
+  response_time_ms INT,
+  cost_estimate DECIMAL(10, 6),
+
+  -- Tier at time of request
+  user_tier TEXT,
+
+  timestamp TIMESTAMP DEFAULT NOW(),
+
+  -- Indexy
+  INDEX idx_user_timestamp (user_id, timestamp),
+  INDEX idx_session_timestamp (session_id, timestamp)
+);
+
+-- Helper function: Get user tier
+CREATE OR REPLACE FUNCTION get_user_tier(p_user_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_tier TEXT;
+  v_subscription_status TEXT;
+  v_subscription_ends_at TIMESTAMP;
+BEGIN
+  -- Get user data
+  SELECT tier, subscription_status, subscription_ends_at
+  INTO v_tier, v_subscription_status, v_subscription_ends_at
+  FROM users
+  WHERE id = p_user_id;
+
+  -- Check if subscription is still valid
+  IF v_tier = 'premium' THEN
+    -- Check subscription status
+    IF v_subscription_status = 'active' THEN
+      RETURN 'premium';
+    ELSIF v_subscription_status = 'trialing' THEN
+      RETURN 'premium';
+    ELSIF v_subscription_ends_at IS NOT NULL AND v_subscription_ends_at > NOW() THEN
+      -- Grace period
+      RETURN 'premium';
+    ELSE
+      -- Expired or canceled
+      RETURN 'free';
+    END IF;
+  END IF;
+
+  -- Default to free
+  RETURN 'free';
+END;
+$$;
+```
+
+### **Authentication Flow:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   1. ANONYMOUS USER                      │
+│                                                          │
+│  • No login required                                     │
+│  • Session ID (browser cookie)                           │
+│  • tier = 'free'                                         │
+│  • Limited: 30 oils, no recipes, no history             │
+│                                                          │
+│  CTA: "Vytvořte si účet pro uložení konverzací"         │
+└──────────────────────┬───────────────────────────────────┘
+                       ↓ Register / Login
+┌─────────────────────────────────────────────────────────┐
+│              2. REGISTERED USER (FREE)                   │
+│                                                          │
+│  • Supabase Auth (email/password nebo OAuth)            │
+│  • tier = 'free'                                         │
+│  • Saved conversations                                   │
+│  • Same content as anonymous (30 oils, no recipes)      │
+│                                                          │
+│  CTA: "Upgrade na premium pro plný přístup"             │
+└──────────────────────┬───────────────────────────────────┘
+                       ↓ Subscribe (Stripe)
+┌─────────────────────────────────────────────────────────┐
+│            3. PREMIUM SUBSCRIBER                         │
+│                                                          │
+│  • tier = 'premium'                                      │
+│  • subscription_status = 'active'                        │
+│  • Full access: 300 oils, all herbs, recipes            │
+│  • Unlimited conversations                               │
+│  • Priority support                                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### **Backend API Implementation:**
+
+#### **1. Chat Endpoint s Tier Check:**
+
+```typescript
+// app/api/chat/route.ts
+
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(req: NextRequest) {
+  const { message, userId, sessionId } = await req.json();
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
+
+  // ==========================================
+  // 1. DETERMINE USER TIER
+  // ==========================================
+  let userTier = 'free';  // Default for anonymous
+
+  if (userId) {
+    // Logged in user - check tier
+    const { data: tierResult } = await supabase
+      .rpc('get_user_tier', { p_user_id: userId });
+
+    userTier = tierResult || 'free';
+  }
+
+  // ==========================================
+  // 2. RATE LIMITING (by tier)
+  // ==========================================
+  const rateLimitKey = userId || sessionId;
+  const { success, remaining } = await checkRateLimit(rateLimitKey, userTier);
+
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Příliš mnoho požadavků. Zkuste za chvíli.' },
+      { status: 429 }
+    );
+  }
+
+  // ==========================================
+  // 3. VECTOR SEARCH (filtered by tier)
+  // ==========================================
+  const queryEmbedding = await createEmbedding(message);
+
+  const { data: chunks } = await supabase.rpc('match_chunks', {
+    query_embedding: queryEmbedding,
+    match_threshold: 0.3,
+    match_count: userTier === 'premium' ? 10 : 5,
+    filter_tier: userTier === 'free' ? 'free' : null  // premium sees all
+  });
+
+  // ==========================================
+  // 4. BUILD CONTEXT & CALL LLM
+  // ==========================================
+  const context = chunks.map(c => c.text).join('\n\n');
+
+  const systemPrompt = `Jsi expert na aromaterapii. Odpovídej na základě těchto informací:
+
+${context}
+
+User tier: ${userTier}
+${userTier === 'free' ? 'DŮLEŽITÉ: Neuvádět přesné recepty (kapky, použití). Jen obecné doporučení.' : ''}
+`;
+
+  const response = await callOpenAI({
+    model: 'gpt-4-mini',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: message }
+    ]
+  });
+
+  // ==========================================
+  // 5. FORMAT RESPONSE (based on tier)
+  // ==========================================
+  let finalResponse = response.content;
+
+  if (userTier === 'free' && containsRecipeKeywords(finalResponse)) {
+    // Add upsell CTA
+    finalResponse += '\n\n💎 Pro detailní recepty s počtem kapek a způsobem použití si vytvořte premium účet.';
+  }
+
+  // ==========================================
+  // 6. SAVE CONVERSATION
+  // ==========================================
+  if (userId) {
+    await supabase.from('conversations').insert({
+      user_id: userId,
+      messages: [
+        { role: 'user', content: message },
+        { role: 'assistant', content: finalResponse }
+      ]
+    });
+  }
+
+  // ==========================================
+  // 7. TRACK USAGE
+  // ==========================================
+  await supabase.from('usage_tracking').insert({
+    user_id: userId,
+    session_id: sessionId,
+    message_length: message.length,
+    tokens_used: response.usage.total_tokens,
+    user_tier: userTier,
+    cost_estimate: calculateCost(response.usage)
+  });
+
+  return NextResponse.json({
+    response: finalResponse,
+    userTier,
+    rateLimit: { remaining }
+  });
+}
+```
+
+#### **2. Stripe Webhook (Subscription Management):**
+
+```typescript
+// app/api/webhooks/stripe/route.ts
+
+import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
+
+export async function POST(req: NextRequest) {
+  const signature = req.headers.get('stripe-signature')!;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      await req.text(),
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+  }
+
+  // ==========================================
+  // HANDLE SUBSCRIPTION EVENTS
+  // ==========================================
+  switch (event.type) {
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const subscription = event.data.object as Stripe.Subscription;
+
+      await supabase.from('users').update({
+        tier: 'premium',
+        stripe_subscription_id: subscription.id,
+        subscription_status: subscription.status,
+        subscription_started_at: new Date(subscription.current_period_start * 1000),
+        subscription_ends_at: new Date(subscription.current_period_end * 1000)
+      }).eq('stripe_customer_id', subscription.customer);
+
+      break;
+    }
+
+    case 'customer.subscription.deleted': {
+      const subscription = event.data.object as Stripe.Subscription;
+
+      await supabase.from('users').update({
+        tier: 'free',
+        subscription_status: 'canceled',
+        subscription_ends_at: new Date()
+      }).eq('stripe_customer_id', subscription.customer);
+
+      break;
+    }
+
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object as Stripe.Invoice;
+
+      await supabase.from('users').update({
+        subscription_status: 'past_due'
+      }).eq('stripe_customer_id', invoice.customer);
+
+      // Send email warning
+      await sendPaymentFailedEmail(invoice.customer_email);
+
+      break;
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+### **Frontend UX Flow:**
+
+#### **1. Anonymous User (first visit):**
+
+```typescript
+// WIX Chat Widget - components/ChatWidget.tsx
+
+export const ChatWidget = () => {
+  const [sessionId] = useState(() => generateSessionId());
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  const handleMessage = async (message: string) => {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        sessionId,
+        userId: null  // Anonymous
+      })
+    });
+
+    const data = await response.json();
+
+    // Show login prompt after 3 messages
+    if (messageCount === 3) {
+      setShowLoginPrompt(true);
+    }
+
+    return data.response;
+  };
+
+  return (
+    <>
+      <ChatInterface onSendMessage={handleMessage} />
+
+      {showLoginPrompt && (
+        <LoginPrompt
+          message="💡 Vytvořte si účet zdarma pro uložení konverzací"
+          onClose={() => setShowLoginPrompt(false)}
+        />
+      )}
+    </>
+  );
+};
+```
+
+#### **2. Logged In User (free tier):**
+
+```typescript
+export const ChatWidget = () => {
+  const { user } = useAuth();  // Supabase Auth
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const handleMessage = async (message: string) => {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        userId: user?.id
+      })
+    });
+
+    const data = await response.json();
+
+    // Detect upsell in response
+    if (data.response.includes('💎 Pro detailní recepty')) {
+      setShowUpgrade(true);
+    }
+
+    return data.response;
+  };
+
+  return (
+    <>
+      <ChatInterface onSendMessage={handleMessage} />
+
+      {showUpgrade && (
+        <UpgradeModal
+          currentPlan="FREE"
+          benefits={[
+            '300 esenciálních olejů',
+            '3,475 chunků o bylinkách',
+            'Detailní recepty s kapkami',
+            'Neomezené dotazy'
+          ]}
+          price="299 Kč/měsíc"
+          onUpgrade={() => window.location.href = '/checkout'}
+        />
+      )}
+    </>
+  );
+};
+```
+
+#### **3. Premium User:**
+
+```typescript
+export const ChatWidget = () => {
+  const { user, tier } = useAuth();
+
+  return (
+    <div>
+      {tier === 'premium' && (
+        <PremiumBadge>✨ Premium</PremiumBadge>
+      )}
+
+      <ChatInterface
+        onSendMessage={handleMessage}
+        features={{
+          allOils: tier === 'premium',
+          recipes: tier === 'premium',
+          unlimited: tier === 'premium'
+        }}
+      />
+    </div>
+  );
+};
+```
+
+### **Kdy se zobrazuje co:**
+
+| Scénář | Action | Result |
+|--------|--------|--------|
+| **Anonymous user dotaz** | "Jak použít levanduli?" | Basic info + "Vytvořte účet pro historii" |
+| **Anonymous → 3 zprávy** | Auto popup | Login modal |
+| **Free user → recipe query** | "Kolik kapek levandule?" | Basic + "💎 Upgrade pro recepty" |
+| **Free user → premium content** | "Info o bylince X" | "💎 Premium content" |
+| **Premium user** | Jakýkoliv dotaz | Full response s recepty |
+
+### **Status implementace:**
+
+```
+✅ Database schema: Navrženo (potřeba vytvořit v Supabase)
+🔄 Backend API: TODO
+🔄 Stripe webhooks: TODO
+🔄 Frontend UX: TODO
+🔄 Supabase Auth: TODO
+```
+
+---
+
 ## 🔒 SECURITY
 
 ### **MVP Security (implementováno):**
